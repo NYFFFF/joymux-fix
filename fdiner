@@ -1,0 +1,57 @@
+def find_node_block(dts: str, needle: str):
+    """
+    Find the block for a node whose name contains `needle`.
+    Returns (brace_l, brace_r, block_text).
+    Raises RuntimeError if not found.
+    """
+    import re
+
+    # Try to find a node line that contains the needle (simple substring match)
+    # Node lines normally look like: node-name {  or node-name@address {
+    node_pattern = re.compile(r'^\s*([0-9A-Za-z_.@-]+)\s*\{', flags=re.MULTILINE)
+    for m in node_pattern.finditer(dts):
+        node_name = m.group(1)
+        if needle in node_name:
+            # find the braces for this block
+            start = m.start()
+            # find the left brace position
+            brace_l = dts.find('{', start)
+            if brace_l == -1:
+                continue
+            # find matching right brace (simple stack-based parser)
+            stack = 0
+            i = brace_l
+            while i < len(dts):
+                if dts[i] == '{':
+                    stack += 1
+                elif dts[i] == '}':
+                    stack -= 1
+                    if stack == 0:
+                        brace_r = i
+                        return brace_l, brace_r, dts[brace_l:brace_r+1]
+                i += 1
+            # If we get here, braces didn't match for this node, continue searching
+            continue
+
+    # If we reach here, nothing matched. Print helpful diagnostics before raising.
+    # Build a candidate list of node-like names with approximate line numbers.
+    candidates = []
+    for m in node_pattern.finditer(dts):
+        name = m.group(1)
+        pos = m.start()
+        line_no = dts.count("\n", 0, pos) + 1
+        candidates.append((name, line_no))
+
+    # Print diagnostics (stdout) so CI logs and local runs show available candidates.
+    if candidates:
+        print("\n[patch_og3_joypad.py] Node search diagnostics: could not find a node containing:",
+              repr(needle))
+        print("[patch_og3_joypad.py] Candidate node names found (first 200):")
+        for name, line_no in candidates[:200]:
+            print(f"  - {name}    (approx line {line_no})")
+        if len(candidates) > 200:
+            print(f"  ... and {len(candidates) - 200} more candidates")
+    else:
+        print("\n[patch_og3_joypad.py] Node search diagnostics: no node-like blocks found in the DTS input.")
+
+    raise RuntimeError(f"找不到节点名包含 “{needle}” 的块，请检查 node_path")
